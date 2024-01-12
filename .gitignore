@@ -160,5 +160,5 @@ cython_debug/
 #.idea/
 
 # Add custom gitginore entries
-.json
-.token
+*.json
+*.token
