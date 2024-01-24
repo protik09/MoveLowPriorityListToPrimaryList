@@ -1,6 +1,11 @@
+# Informal API to access Google Keep
 gkeepapi
-keyring
+# For JSON parsing
 json
-infi.systray
 simplejson
+# For making a system tray icon in windows
+infi.systray
+# Protecting your master token to log into Google Keep
+keyring # Dump master token to system password manager
 keyring[completion]
+maskpass # Hide master token on input
