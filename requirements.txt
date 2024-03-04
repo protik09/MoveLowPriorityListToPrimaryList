@@ -1,7 +1,6 @@
 # Informal API to access Google Keep
 gkeepapi
 # For JSON parsing
-json
 simplejson
 # For making a system tray icon in windows
 infi.systray
