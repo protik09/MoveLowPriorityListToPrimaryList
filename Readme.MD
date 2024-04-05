@@ -20,7 +20,7 @@ This Python script automates the management of shopping lists in Google Keep by 
    pip install -r requirements.txt
    ```
 
-4. Obtain a Google Keep Master Token. Instructions for obtaining this token using the included Dockerfile can be found [HERE](https://github.com/djsudduth/keep-it-markdown/issues/72#issuecomment-1793495242). (This is due to some breaking changes with the OAuth module).
+4. Obtain a Google Keep Master Token. Instructions for obtaining this token using the included Dockerfile can be found [HERE](https://github.com/djsudduth/keep-it-markdown/issues/72#issuecomment-1905274630). (This is due to some breaking changes with the OAuth module).
 
 ## Usage Examples
 
