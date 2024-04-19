@@ -11,11 +11,8 @@ import gkeepapi
 import keyring
 import maskpass
 import re
+import json
 
-try:
-    import simplejson as json
-except ImportError:
-    import json
 # from time import perf_counter as timer
 from time import sleep
 

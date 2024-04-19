@@ -1,0 +1,7 @@
+# Informal API to access Google Keep
+gkeepapi
+# Protecting your master token to log into Google Keep
+keyring # Dump master token to system password manager
+keyring[completion]
+maskpass # Hide master token on input
+infi.systray
