@@ -82,9 +82,11 @@ def checkUsername(username: str) -> bool:
     Returns:
         Bool: 'True' if valid, 'False' if not.
     """
-    assert username != "", "Username is empty"
-    email_regex = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
-    assert re.match(email_regex, username), f"Invalid email address: {'username'}"
+    if not username:
+        raise ValueError("Username is empty")
+    email_regex = r"\b[A-Za-z0-9._%+-]+@gmail\.[A-Z|a-z]{2,}\b"
+    if not re.match(email_regex, username):
+        raise ValueError(f"Invalid email address: {username}. Must be a gmail account.")
     return True
 
 
@@ -98,11 +100,12 @@ def checkToken(token: str) -> bool:
         token (str): Google Keep Master Token
 
     Returns:
-        None
+        Bool: 'True' if valid, 'False' if not.
     """
-    assert token != "", f"Master token is empty, got: {token}"
-    assert len(token) > 100, f"Master token is too short, got: {len(token)} characters"
-
+    if not token:
+        raise ValueError("Master token is empty")
+    if len(token) < 100:  # This is a guess
+        raise ValueError(f"Master token is too short, got: {len(token)} characters")
     return True
 
 
@@ -115,24 +118,30 @@ def checkListNames(keep: object, primary_list: list, low_priority_list: list) ->
         primary_list (list): Names of primary lists
         low_priority_list (list): Names of low priority lists
 
+    Raises:
+        ValueError: If any of the lists are empty or list names are invalid.
+        LookupError: If a list name does not exist in the keep object.
+
     Returns:
-        None
+        True if all checks pass.
     """
-    assert primary_list != [], "Primary list name is empty"
+    if not primary_list:
+        raise ValueError("Primary list name is empty")
     for list_name in primary_list:
-        assert list_name != "", f"Invalid Primary list name: {list_name}"
-    assert low_priority_list != [], "Low priority list name is empty"
+        if not list_name:
+            raise ValueError(f"Invalid Primary list name: {list_name}")
+    if not low_priority_list:
+        raise ValueError("Low priority list name is empty")
     for list_name in low_priority_list:
-        assert list_name != "", f"Invalid Low priority list name: {list_name}"
+        if not list_name:
+            raise ValueError(f"Invalid Low priority list name: {list_name}")
     # Check if the list names exist in the keep object
     for list_name in primary_list:
-        assert (
-            keep.list(list_name) is not None
-        ), f"Primary list does not exist: {list_name}"
+        if keep.list(list_name) is None:
+            raise LookupError(f"Primary list does not exist: {list_name}")
     for list_name in low_priority_list:
-        assert (
-            keep.list(list_name) is not None
-        ), f"Low priority list does not exist: {list_name}"
+        if keep.list(list_name) is None:
+            raise LookupError(f"Low priority list does not exist: {list_name}")
     return True
 
 
@@ -168,7 +177,8 @@ def checkNumSets(num_sets: int) -> bool:
     Returns:
         None
     """
-    assert num_sets > 0, f"Number of sets must be greater than 0, got: {num_sets}"
+    if num_sets < 1:  # Check that the number of sets is greater than 0
+        raise ValueError(f"Number of sets must be greater than 0, got: {num_sets}")
     return True
 
 
@@ -183,8 +193,10 @@ def checkSettings(keep: object, config: dict) -> bool:
     Returns:
         bool: 'True' if settings are valid, 'False' if not
     """
-    assert config != {}, f"{CONFIG_FILE} is empty"  # Check that config is not empty
-    assert config["first_run_flag"] == "True", f"{CONFIG_FILE} maybe corrupted"
+    if not config:
+        raise ValueError(f"{CONFIG_FILE} is empty")
+    if not config["first_run_flag"] == "True":  # Check that the first run flag is set
+        raise ValueError(f"{CONFIG_FILE} maybe corrupted")
     checkToken(config["master_token"])
     checkUsername(config["username"])
     checkNumSets(config["num_sets"])
@@ -217,7 +229,7 @@ def moveItemsToPrimaryList(
     return None
 
 
-def delete_ticked_items_from_primary_list(keep: object, primary_list: str) -> None:
+def DeleteTickedItemsFromPrimaryList(keep: object, primary_list: str) -> None:
     """
     Delete ticked items from primary list.
 
@@ -252,21 +264,21 @@ def programLoop(keep: object, config: dict) -> None:
     while True:
         # Syc the changes to the Google Keep server
         keep.sync()
-        items_to_move = checkLowPriorityItems(keep, config["low_priority_list"])
+        items_to_move: list = checkLowPriorityItems(keep, config["low_priority_list"])
 
         # if no items to move, return to check for low priority items
-        if items_to_move == []:
-            # print('No items to move')
-            pass
-        else:
+        if items_to_move:
             moveItemsToPrimaryList(keep, config["primary_list"], items_to_move)
             print(f'Moved {len(items_to_move)} items to {config["primary_list"]}')
-            items_to_move = []
+            items_to_move.clear()
+
             # Dump Keep Notes to disk for caching
             with open(os.path.join(BASE_DIR, "keep_notes.json"), "w") as outfile:
                 json.dump(keep.dump(), outfile)
+        else:
+            pass
         # Rate restriction to prevent API ban from Google
-        sleep(0.5)
+        sleep(1)
 
         return None
 
@@ -332,11 +344,13 @@ def getConfigFromUser() -> tuple:
 def main():
     # start_time = timer()
     # Check for input config files
-    parser = argparse.ArgumentParser(description="Simple CLI tool")
+    parser = argparse.ArgumentParser(
+        description="Move Low Priority Items to Primary List in Google Keep"
+    )
     parser.add_argument("--config", "-c", default="", help="Input config file path")
     args = parser.parse_args()
 
-    if args.config != "":
+    if args.config:
         CONFIG_FILE = args.config
         print(f"Using config file: {CONFIG_FILE}")
     else:
@@ -358,12 +372,14 @@ def main():
         config = loadSettings()
         checkSettings(config)
         # Restore notes from database or online
-        keep.resume(
-            config["username"],
-            config["master_token"],
-            state=json.load(open("keep_notes.json")),
-        )
-
+        try:  # Try to load notes from disk
+            keep.resume(
+                config["username"],
+                config["master_token"],
+                state=json.load(open("keep_notes.json")),
+            )
+        except FileNotFoundError:  # If the file is not found, load notes from online
+            keep.resume(config["username"], config["master_token"])
     # end_time = timer()
     # print(f'Time to initialize: {(end_time - start_time)}s')
 
