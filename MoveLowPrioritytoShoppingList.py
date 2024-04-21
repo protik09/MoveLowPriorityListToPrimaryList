@@ -386,6 +386,7 @@ def main():
         print(f"Using config file: {_config_file}")
         config = loadConfig(_config_file)
     else:
+        # If no external config file specified, check if first run
         if firstRun():
             print("First run")
             keep, config = getConfigFromUser()
@@ -399,6 +400,7 @@ def main():
             with open(KEEP_NOTES_PATH, "w") as outfile:
                 json.dump(keep.dump(), outfile)
         else:
+            # Load default config.json, if custom one not specified, and its not the first run
             config = loadConfig(CONFIG_FILE)
     # Load all Keep Notes
     try:
