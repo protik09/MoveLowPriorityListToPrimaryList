@@ -436,7 +436,7 @@ def main():
             if checkConfig(config):
                 pass
             else:
-                raise Exception("Settings are not valid")
+                raise SyntaxError("Settings are not valid")
 
             # Dump Keep Notes to disk for caching
             with open(KEEP_NOTES_PATH, "w") as outfile:
