@@ -59,7 +59,6 @@ Currently, there are no automated tests for this script. Manual testing can be d
 ## Acknowledgements/Credits
 
 - **Author:** Protik Banerji <protik09@gmail.com>
-- Thanks to the developers of `gkeepapi`, `keyring`, `maskpass`, `simplejson`, and `infi.systray` for their excellent libraries that made this project possible.
 
 ## Usage
 
