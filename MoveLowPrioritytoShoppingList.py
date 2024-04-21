@@ -22,7 +22,7 @@ else:
     pass
 
 # Define constants at the top of your file
-GOOGLE_KEEP_MASTER_TOKEN: str = "Google Keep Master Token"
+KEYRING_NAME: str = "Google Keep Master Token"
 # Define the base directory for your application
 BASE_DIR: str = os.path.abspath(os.getcwd())
 CONFIG_FILE: str = os.path.join(BASE_DIR, "config.json")
@@ -45,7 +45,7 @@ def firstRun() -> bool:
     )  # The 'not' is there to flip the return value of isfile
 
 
-def loadSettings(config: str = CONFIG_FILE) -> dict:
+def loadConfig(_config_file: str) -> dict:
     """
     Load settings from config.json
 
@@ -53,20 +53,24 @@ def loadSettings(config: str = CONFIG_FILE) -> dict:
         dict: Dictionary of settings
     """
     try:
-        with open(CONFIG_FILE, "r") as openfile:
+        with open(_config_file, "r") as openfile:
             # Reading the settings from json file
-            settings = json.load(openfile)
+            config = json.load(openfile)
             # The Google Master Token is stored on the system keyring and extracted from there
-            settings["master_token"] = keyring.get_password(
-                GOOGLE_KEEP_MASTER_TOKEN, settings["username"]
-            )
-            return settings
+            try:
+                config["master_token"] = keyring.get_password(
+                    KEYRING_NAME, config["username"]
+                )
+            except Exception as e:
+                raise Exception(
+                    f"""Error loading master token from keyring.
+                    You might not have the necessary permissions: {e}"""
+                )
+            return config
     except FileNotFoundError:
-        print(f"{CONFIG_FILE} not found.")
-        return {}
+        raise FileNotFoundError(f"{_config_file} not found.")
     except Exception as e:
-        print(f"An error occurred: {e}")
-        return {}
+        raise Exception(f"An unknown error occurred: {e}")
 
 
 def checkUsername(username: str) -> bool:
@@ -106,64 +110,6 @@ def checkToken(token: str) -> bool:
     return True
 
 
-def checkListNames(keep: object, primary_list: list, low_priority_list: list) -> bool:
-    """
-    Check that the primary and low priority list names are not empty or non-existent in the keep object.
-
-    Args:
-        keep (obj): Google Keep object
-        primary_list (list): Names of primary lists
-        low_priority_list (list): Names of low priority lists
-
-    Raises:
-        ValueError: If any of the lists are empty or list names are invalid.
-        LookupError: If a list name does not exist in the keep object.
-
-    Returns:
-        True if all checks pass.
-    """
-    if not primary_list:
-        raise ValueError("Primary list name is empty")
-    for list_name in primary_list:
-        if not list_name:
-            raise ValueError(f"Invalid Primary list name: {list_name}")
-    if not low_priority_list:
-        raise ValueError("Low priority list name is empty")
-    for list_name in low_priority_list:
-        if not list_name:
-            raise ValueError(f"Invalid Low priority list name: {list_name}")
-    # Check if the list names exist in the keep object
-    for list_name in primary_list:
-        if keep.list(list_name) is None:
-            raise LookupError(f"Primary list does not exist: {list_name}")
-    for list_name in low_priority_list:
-        if keep.list(list_name) is None:
-            raise LookupError(f"Low priority list does not exist: {list_name}")
-    return True
-
-
-def checkLowPriorityItems(keep: object, low_priority_list: str) -> list:
-    """
-    Check the low priority list for items that are ticked.
-
-    Args:
-        keep (obj): Google Keep object
-        low_priority_list (str): Name of low priority list
-
-    Returns:
-        list: List of items to move
-    """
-    items_to_move = []
-    for note in keep.all():
-        if low_priority_list in note.title:
-            checked_items = note.checked
-            for item in checked_items:
-                items_to_move.append(item)
-                # delete item from note
-                item.delete()
-    return items_to_move
-
-
 def checkNumSets(num_sets: int) -> bool:
     """
     Check that the number of sets is greater than 0.
@@ -179,7 +125,103 @@ def checkNumSets(num_sets: int) -> bool:
     return True
 
 
-def checkSettings(keep: object, config: dict) -> bool:
+class KeepListObj:
+
+    def __init__(
+        self, _keep_notes: object, _primary_list: str, _secondary_list: str
+    ) -> None:
+        self.primary_list = _primary_list
+        self.secondary_list = _secondary_list
+        self.keep_notes = _keep_notes
+
+    def checkListNames(self) -> bool:
+        """
+        Check that the primary and low priority list names are not empty
+        or non-existent in the keep object.
+
+        Raises:
+            ValueError: If any of the lists are empty or list names are invalid.
+            LookupError: If a list name does not exist in the keep object.
+
+        Returns:
+            True if all checks pass.
+        """
+        if not self.primary_list:
+            raise ValueError("Primary list name is empty")
+        if not self.secondary_list:
+            raise ValueError("Low priority list is empty")
+        for list_name in [
+            self.secondary_list,
+            self.primary_list,
+        ]:  # Check if title exists using keep.find()
+            if not self.keep_notes.find(
+                list_name
+            ):  # If the list name is not found in the keep object
+                raise LookupError(f"List - {list_name} does not exist.")
+        return True
+
+    def moveItemsToPrimaryList(self, items_to_move: list) -> None:
+        """
+        Move ticked items from low priority list to primary list.
+
+        Args:
+            keep (obj): Google Keep object
+            primary_list (str): Name of primary list
+            items_to_move (list): List of items to move
+
+        Returns:
+            None
+        """
+        for note in self.keep_notes.all():
+            if self.primary_list in note.title:
+                for item in items_to_move:
+                    # Add the item to the top of the primary list unticked
+                    note.add(
+                        item.text,
+                        False,
+                        gkeepapi.node.NewListItemPlacementValue.Top,
+                    )
+        return None
+
+    def deleteTickedItems(self, ticked_list_del: str) -> list:
+        """
+        Delete ticked items from _ticked_list_del.\
+        Args:
+            _ticked_list_del (str): Name of list to delete ticked items from
+        Returns:
+            List of items deleted
+        """
+        _items_deleted = []
+        for note in self.keep_notes.all():
+            if ticked_list_del in note.title:
+                for item in note:
+                    if item.checked:
+                        _items_deleted.append(item)
+                        item.delete()
+        return _items_deleted
+
+    def checkIfLowPriorityTicked(self) -> list:
+        """
+        Check the low priority list for items that are ticked.
+
+        Args:
+            keep (obj): Google Keep object
+            secondary_list (str): Name of low priority list
+
+        Returns:
+            list: List of items to move
+        """
+        items_to_move = []
+        for note in self.keep_notes.all():
+            if self.secondary_list in note.title:
+                for item in note.checked:
+                    items_to_move.append(item)
+                    # delete item from note
+                    item.delete()
+        return items_to_move
+
+
+def checkConfig(config: dict, keep_list_obj_list: list[KeepListObj]) -> bool:
     """
     Check that the settings file is not broken.
 
@@ -197,87 +239,12 @@ def checkSettings(keep: object, config: dict) -> bool:
     checkToken(config["master_token"])
     checkUsername(config["username"])
     checkNumSets(config["num_sets"])
-    # Check to see that there are no empty elements or empty strings in the primary and low prioritylist
-    checkListNames(keep, config["primary_list"], config["low_priority_list"])
+    for _list_objs in keep_list_obj_list:
+        _list_objs.checkListNames()
+
     print(f'Loaded settings. Username: {config["username"]}')
 
     return True
-
-
-def moveItemsToPrimaryList(
-    keep: object, primary_list: str, items_to_move: list
-) -> None:
-    """
-    Move ticked items from low priority list to primary list.
-
-    Args:
-        keep (obj): Google Keep object
-        primary_list (str): Name of primary list
-        items_to_move (list): List of items to move
-
-    Returns:
-        None
-    """
-    for note in keep.all():
-        if primary_list in note.title:
-            for item in items_to_move:
-                # Add the item to the top of the primary list unticked
-                note.add(item.text, False, gkeepapi.node.NewListItemPlacementValue.Top)
-    return None
-
-
-def DeleteTickedItemsFromPrimaryList(keep: object, primary_list: str) -> None:
-    """
-    Delete ticked items from primary list.
-
-    Args:
-        keep (obj): Google Keep object
-        primary_list (str): Name of primary list
-
-    Returns:
-        None
-    """
-    for note in keep.all():
-        if primary_list in note.title:
-            for item in note:
-                if item.checked:
-                    item.delete()
-
-    return None
-
-
-def programLoop(keep: object, config: dict) -> None:
-    """
-    Synchronize the changes to the Google Keep server and continuously move
-    low priority items to the primary list.
-
-    Args:
-        keep (object): The object representing the Google Keep instance.
-        config (dict): The dictionary containing the configuration settings.
-
-    Returns:
-        None
-    """
-    while True:
-        # Syc the changes to the Google Keep server
-        keep.sync()
-        items_to_move: list = checkLowPriorityItems(keep, config["low_priority_list"])
-
-        # if no items to move, return to check for low priority items
-        if items_to_move:
-            moveItemsToPrimaryList(keep, config["primary_list"], items_to_move)
-            print(f'Moved {len(items_to_move)} items to {config["primary_list"]}')
-            items_to_move.clear()
-
-            # Dump Keep Notes to disk for caching
-            with open(os.path.join(BASE_DIR, "keep_notes.json"), "w") as outfile:
-                json.dump(keep.dump(), outfile)
-        else:
-            pass
-        # Rate restriction to prevent API ban from Google
-        sleep(1)
-
-        return None
 
 
 def getConfigFromUser() -> tuple:
@@ -294,48 +261,111 @@ def getConfigFromUser() -> tuple:
         keep (obj): Google Keep object
         config (dict): Dictionary of settings
     """
-    username = input("Google Keep Username: ")
-    checkUsername(username)
-    master_token = maskpass.askpass(
+    _username = input("Google Keep Username: ")
+    checkUsername(_username)
+    _master_token = maskpass.askpass(
         "Google Keep Master Token (Use the included DockerFile to get one): "
     )
-    checkToken(master_token)
+    checkToken(_master_token)
     # Load all Keep Notes
     try:
-        keep = gkeepapi.Keep()
-        keep.resume(username, master_token)
+        _keep = gkeepapi.Keep()
+        _keep.authenticate(_username, _master_token)
     except Exception as e:
-        print(f"Username or master token is invalid: {e}")
-        exit(-1)
+        raise Exception(f"Username or master token is invalid: {e}")
     # If the login above is successful, write the master token to system keyring
-    keyring.set_password("Google Keep Master Token", username, master_token)
+    try:
+        keyring.set_password(KEYRING_NAME, _username, _master_token)
+    except Exception as e:
+        raise Exception(
+            f"""Error saving master token to keyring.
+            You might not have the necessary permissions: {e}"""
+        )
     num_sets = int(input("Number of Sets of Lists (1 Set contains two Lists ): "))
     checkNumSets(num_sets)
 
-    primary_lists = []
-    low_priority_lists = []
+    _primary_lists = []
+    _secondary_lists = []
+    _list_sets_obj = []
     for i in range(int(num_sets)):
-        primary_list = input(f"Name of Primary List {i+1}: ")
-        low_priority_list = input(f"Name of Low Priority List {i+1}: ")
-        primary_lists.append(primary_list)
-        low_priority_lists.append(low_priority_list)
-        checkListNames(primary_lists, low_priority_lists)
-        # Master token is stored on the system keyring so deliberately empty
-        config = {
-            "first_run_flag": "True",
-            "username": username,
-            "master_token": "",
-            "num_sets": num_sets,
-            "primary_list": primary_lists,
-            "low_priority_list": low_priority_lists,
-        }
-        json_serialized = json.dumps(config, indent=4)
 
-        # Writing config.json
-        with open("config.json", "w") as outfile:
-            outfile.write(json_serialized)
-        config["master_token"] = master_token
-    return (keep, config)
+        primary_list = input(f"Name of Primary List {i+1}: ")
+        secondary_list = input(f"Name of Low Priority List {i+1}: ")
+        _x: KeepListObj = KeepListObj(_keep, primary_list, secondary_list)
+
+        _list_sets_obj.append(_x)
+        _primary_lists.append(primary_list)
+        _secondary_lists.append(secondary_list)
+        _x.checkListNames()
+    # Serialize KeepListObj objects to JSON
+    _list_sets_serialized = json.dumps([vars(_y) for _y in _list_sets_obj])
+
+    # Master token is stored on the system keyring so deliberately empty
+    _config = {
+        "first_run_flag": "True",
+        "username": _username,
+        "master_token": "",
+        "num_sets": num_sets,
+        "list_sets": _list_sets_serialized,
+    }
+    _json_serialized = json.dumps(_config, indent=4)
+
+    # Writing config.json only after all checks have passed
+    with open(CONFIG_FILE, "w") as outfile:
+        outfile.write(_json_serialized)
+    _config["master_token"] = _master_token
+
+    return (_keep, _config)
+
+
+def programLoop(keep: object, config: dict) -> None:
+    """
+    Synchronize the changes to the Google Keep server and continuously move
+    low priority items to the primary list using deserialized KeepListObj objects.
+
+    Args:
+        keep (object): The object representing the Google Keep instance.
+        config (dict): The dictionary containing the configuration settings.
+
+    Returns:
+        None
+    """
+    # Deserialize KeepListObj objects from config
+    keep_list = [
+        KeepListObj(**list_set) for list_set in json.loads(config["list_sets"])
+    ]
+
+    try:
+        while True:
+            # Sync the changes to the Google Keep server
+            keep.sync()
+
+            for keep_obj in keep_list:
+                items_to_move = keep_obj.checkIfLowPriorityTicked()
+
+                # if no items to move, return to check for low priority items
+                if items_to_move:
+                    keep_obj.moveItemsToPrimaryList(items_to_move)
+                    print(
+                        f"Moved {len(items_to_move)} items to {keep_obj.primary_list}"
+                    )
+                    items_to_move.clear()
+
+                    # Dump Keep Notes to disk for caching
+                    with open(KEEP_NOTES_PATH, "w") as outfile:
+                        json.dump(keep.dump(), outfile)
+                else:
+                    pass
+
+            # Rate restriction to prevent API ban from Google
+            sleep(1)
+
+    except KeyboardInterrupt:
+        print("Program interrupted by user.")
+        return 0
+    except Exception as e:
+        print(f"An unknown error occurred: {e}")
+        return -2
 
 
 def main():
@@ -348,35 +378,42 @@ def main():
     args = parser.parse_args()
 
     if args.config:
-        CONFIG_FILE = args.config
-        print(f"Using config file: {CONFIG_FILE}")
+        _config_file = args.config
+        print(f"Using config file: {_config_file}")
+        config = loadConfig(_config_file)
     else:
         if firstRun():
             print("First run")
             keep, config = getConfigFromUser()
             # Before loading the Google Keep object check the settings
-            if checkSettings(keep, config):
+            if checkConfig(keep, config):
                 pass
             else:
                 raise Exception("Settings are not valid")
 
             # Dump Keep Notes to disk for caching
-            with open("keep_notes.json", "w") as outfile:
+            with open(KEEP_NOTES_PATH, "w") as outfile:
                 json.dump(keep.dump(), outfile)
         else:
-            pass
-
-        config = loadSettings()
-        checkSettings(config)
-        # Restore notes from database or online
-        try:  # Try to load notes from disk
-            keep.resume(
-                config["username"],
-                config["master_token"],
-                state=json.load(open("keep_notes.json")),
-            )
-        except FileNotFoundError:  # If the file is not found, load notes from online
-            keep.resume(config["username"], config["master_token"])
+            config = loadConfig(CONFIG_FILE)
+    # Load all Keep Notes
+    try:
+        keep = gkeepapi.Keep()
+        keep.authenticate(config["username"], config["master_token"])
+    except Exception as e:
+        raise Exception(f"Username or master token is invalid: {e}")
+    checkConfig(config)
+    # Restore notes from database or online
+    try:  # Try to load notes from disk
+        keep.authenticate(
+            config["username"],
+            config["master_token"],
+            state=json.load(open(KEEP_NOTES_PATH)),
+        )
+    except FileNotFoundError:  # If the file is not found, load notes from online
+        keep.authenticate(config["username"], config["master_token"])
+    except Exception as e:
+        raise Exception(f"Error restoring notes: {e}")
     # end_time = timer()
     # print(f'Time to initialize: {(end_time - start_time)}s')
 
@@ -390,9 +427,13 @@ def main():
             sysTrayIcon.start()
         except KeyboardInterrupt:
             sysTrayIcon.shutdown()
+            raise KeyboardInterrupt("SysTrayIcon shutdown.")
+        except Exception as e:
+            raise Exception(f"Error: {e}")
     else:
         pass
-    programLoop(keep, config)
+    # Run the program loop and return any exceptions
+    return programLoop(keep, config)
 
 
 if __name__ == "__main__":
