@@ -172,32 +172,34 @@ class KeepListObj:
         Returns:
             None
         """
-        for note in self.keep_notes.all():
-            if self.primary_list in note.title:
-                for item in items_to_move:
-                    # Add the item to the top of the primary list unticked
-                    note.add(
-                        item.text,
-                        False,
-                        gkeepapi.node.NewListItemPlacementValue.Top,
-                    )
+        # Find the note matching primary_list in the keep notes object
+        for note in self.keep_notes.find(query=self.primary_list):
+            for item in items_to_move:
+                # Add the item to the top of the primary list unticked
+                note.add(
+                    item.text,
+                    False,
+                    gkeepapi.node.NewListItemPlacementValue.Top,
+                )
         return None
 
     def deleteTickedItems(self, ticked_list_del: str) -> list:
         """
-        Delete ticked items from _ticked_list_del.\
+        Delete ticked items from _ticked_list_del.
+
         Args:
             _ticked_list_del (str): Name of list to delete ticked items from
+
         Returns:
             List of items deleted
         """
         _items_deleted = []
-        for note in self.keep_notes.all():
-            if ticked_list_del in note.title:
-                for item in note:
-                    if item.checked:
-                        _items_deleted.append(item)
-                        item.delete()
+        for note in self.keep_notes.find(query=ticked_list_del):
+            # Check through all the ticked items in the given note
+            for item in note:
+                if item.checked:
+                    _items_deleted.append(item)
+                    item.delete()
         return _items_deleted
 
     def checkIfLowPriorityTicked(self) -> list:
@@ -212,7 +214,7 @@ class KeepListObj:
             list: List of items to move
         """
         items_to_move = []
-        for note in self.keep_notes.all():
+        for note in self.keep_notes.find(query=self.secondary_list):
             if self.secondary_list in note.title:
                 for item in note.checked:
                     items_to_move.append(item)
