@@ -128,7 +128,7 @@ def checkNumSets(num_sets: int) -> bool:
 class KeepListObj:
 
     def __init__(
-        self, _keep_notes: object, _primary_list: str, _secondary_list: str
+        self, _keep_notes: gkeepapi.Keep, _primary_list: str, _secondary_list: str
     ) -> None:
         self.primary_list: str = _primary_list
         self.secondary_list: str = _secondary_list
@@ -165,8 +165,6 @@ class KeepListObj:
         Move ticked items from low priority list to primary list.
 
         Args:
-            keep (obj): Google Keep object
-            primary_list (str): Name of primary list
             items_to_move (list): List of items to move
 
         Returns:
@@ -205,10 +203,8 @@ class KeepListObj:
     def checkIfLowPriorityTicked(self) -> list:
         """
         Check the low priority list for items that are ticked.
-
-        Args:
-            keep (obj): Google Keep object
-            secondary_list (str): Name of low priority list
+        If ticked, add them to a list to be moved to the primary list.
+        Then delete the ticked items from the low priority list.
 
         Returns:
             list: List of items to move
@@ -223,37 +219,7 @@ class KeepListObj:
         return items_to_move
 
 
-def checkConfig(config: dict) -> bool:
-    """
-    Check that the settings file is not broken.
-
-    Args:
-        keep (obj): Google Keep object
-        config (dict): Dictionary of settings
-
-    Returns:
-        bool: 'True' if settings are valid, 'False' if not
-    """
-    if not config:
-        raise ValueError(f"{CONFIG_FILE} is empty")
-    if not config["first_run_flag"] == "True":  # Check that the first run flag is set
-        raise ValueError(f"{CONFIG_FILE} maybe corrupted")
-    checkToken(config["master_token"])
-    checkUsername(config["username"])
-    checkNumSets(config["num_sets"])
-    # Deserialize KeepListObj objects from config
-    _keep_list = [
-        KeepListObj(**list_set) for list_set in json.loads(config["list_sets"])
-    ]
-    for _list_objs in _keep_list:
-        _list_objs.checkListNames()
-
-    print(f'Loaded settings. Username: {config["username"]}')
-
-    return True
-
-
-def getConfigFromUser() -> tuple:
+def getConfigFromUser() -> tuple[gkeepapi.Keep, dict]:
     """
     Get the configuration from the user.
     * This function is only called if the config.json file is not found.
@@ -294,7 +260,6 @@ def getConfigFromUser() -> tuple:
     _secondary_lists = []
     _list_sets_obj = []
     for i in range(int(num_sets)):
-
         primary_list = input(f"Name of Primary List {i+1}: ")
         secondary_list = input(f"Name of Low Priority List {i+1}: ")
         _x: KeepListObj = KeepListObj(_keep, primary_list, secondary_list)
@@ -324,7 +289,46 @@ def getConfigFromUser() -> tuple:
     return (_keep, _config)
 
 
-def programLoop(keep: object, config: dict) -> None:
+def checkConfig(config: dict) -> bool:
+    """
+    Check that the settings file is not broken.
+
+    Args:
+        config (dict): Dictionary of settings
+
+    Returns:
+        bool: 'True' if settings are valid, 'False' if not
+
+    Raises:
+        ValueError: If the config file is empty.
+        ValueError: If the first run flag is not set.
+        ValueError: If the username is invalid.
+        ValueError: If the number of sets is less than 1.
+        ValueError: If the master token is invalid.
+        ValueError: If the list names are invalid.
+        FileNotFoundError: If the config file is not found.
+        Exception: If an unknown error occurs.
+    """
+    if not config:
+        raise ValueError(f"{CONFIG_FILE} is empty")
+    if not config["first_run_flag"] == "True":  # Check that the first run flag is set
+        raise ValueError(f"{CONFIG_FILE} maybe corrupted")
+    checkToken(config["master_token"])
+    checkUsername(config["username"])
+    checkNumSets(config["num_sets"])
+    # Deserialize KeepListObj objects from config
+    _keep_list = [
+        KeepListObj(**list_set) for list_set in json.loads(config["list_sets"])
+    ]
+    for _list_objs in _keep_list:
+        _list_objs.checkListNames()
+
+    print(f'Loaded settings. Username: {config["username"]}')
+
+    return True
+
+
+def programLoop(keep: gkeepapi.Keep, config: dict) -> None:
     """
     Synchronize the changes to the Google Keep server and continuously move
     low priority items to the primary list using deserialized KeepListObj objects.
@@ -335,6 +339,10 @@ def programLoop(keep: object, config: dict) -> None:
 
     Returns:
         None
+
+    Raises:
+        KeyboardInterrupt: If the user interrupts the program.
+        Exception: If an unknown error occurs.
     """
     # Deserialize KeepListObj objects from config
     keep_list = [
@@ -375,7 +383,6 @@ def programLoop(keep: object, config: dict) -> None:
 
 
 def main():
-    # start_time = timer()
     # Check for input config files
     parser = argparse.ArgumentParser(
         description="Move Low Priority Items to Primary List in Google Keep"
@@ -422,8 +429,6 @@ def main():
         keep.authenticate(config["username"], config["master_token"])
     except Exception as e:
         raise Exception(f"Error restoring notes: {e}")
-    # end_time = timer()
-    # print(f'Time to initialize: {(end_time - start_time)}s')
 
     # # Start SysTray Icon if running on Windows, do nothing if on Linux
     # if os.name == "nt":
@@ -440,6 +445,7 @@ def main():
     #         raise Exception(f"Error: {e}")
     # else:
     #     pass
+
     # Run the program loop and return any exceptions
     return programLoop(keep, config)
 
