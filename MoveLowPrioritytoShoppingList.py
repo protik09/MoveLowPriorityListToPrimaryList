@@ -425,21 +425,21 @@ def main():
     # end_time = timer()
     # print(f'Time to initialize: {(end_time - start_time)}s')
 
-    # Start SysTray Icon if running on Windows, do nothing if on Linux
-    if os.name == "nt":
-        hover_text = "Move Low Priority Items to Primary List in Google Keep"
-        sysTrayIcon = SysTrayIcon(
-            "keep_notes_automation.ico", hover_text, default_menu_index=1
-        )
-        try:
-            sysTrayIcon.start()
-        except KeyboardInterrupt:
-            sysTrayIcon.shutdown()
-            raise KeyboardInterrupt("SysTrayIcon shutdown.")
-        except Exception as e:
-            raise Exception(f"Error: {e}")
-    else:
-        pass
+    # # Start SysTray Icon if running on Windows, do nothing if on Linux
+    # if os.name == "nt":
+    #     hover_text = "Move Low Priority Items to Primary List in Google Keep"
+    #     sysTrayIcon = SysTrayIcon(
+    #         "keep_notes_automation.ico", hover_text, default_menu_index=1
+    #     )
+    #     try:
+    #         sysTrayIcon.start()
+    #     except KeyboardInterrupt:
+    #         sysTrayIcon.shutdown()
+    #         raise KeyboardInterrupt("SysTrayIcon shutdown.")
+    #     except Exception as e:
+    #         raise Exception(f"Error: {e}")
+    # else:
+    #     pass
     # Run the program loop and return any exceptions
     return programLoop(keep, config)
 
