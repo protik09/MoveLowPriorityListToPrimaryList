@@ -128,11 +128,11 @@ def checkNumSets(num_sets: int) -> bool:
 class KeepListObj:
 
     def __init__(
-        self, _keep_notes: gkeepapi.Keep, _primary_list: str, _secondary_list: str
+        self, keep_notes: gkeepapi.Keep, primary_list: str, secondary_list: str
     ) -> None:
-        self.primary_list: str = _primary_list
-        self.secondary_list: str = _secondary_list
-        self.keep_notes: object = _keep_notes
+        self.primary_list: str = primary_list
+        self.secondary_list: str = secondary_list
+        self.keep_notes: object = keep_notes
 
     def checkListNames(self) -> bool:
         """
@@ -209,14 +209,14 @@ class KeepListObj:
         Returns:
             list: List of items to move
         """
-        items_to_move = []
+        _items_to_move = []
         for note in self.keep_notes.find(query=self.secondary_list):
             if self.secondary_list in note.title:
                 for item in note.checked:
-                    items_to_move.append(item)
+                    _items_to_move.append(item)
                     # delete item from note
                     item.delete()
-        return items_to_move
+        return _items_to_move
 
 
 def getConfigFromUser() -> tuple[gkeepapi.Keep, dict]:
@@ -260,13 +260,13 @@ def getConfigFromUser() -> tuple[gkeepapi.Keep, dict]:
     _secondary_lists = []
     _list_sets_obj = []
     for i in range(int(num_sets)):
-        primary_list = input(f"Name of Primary List {i+1}: ")
-        secondary_list = input(f"Name of Low Priority List {i+1}: ")
-        _x: KeepListObj = KeepListObj(_keep, primary_list, secondary_list)
+        _primary_list = input(f"Name of Primary List {i+1}: ")
+        _secondary_list = input(f"Name of Low Priority List {i+1}: ")
+        _x: KeepListObj = KeepListObj(_keep, _primary_list, _secondary_list)
 
         _list_sets_obj.append(_x)
-        _primary_lists.append(primary_list)
-        _secondary_lists.append(secondary_list)
+        _primary_lists.append(_primary_list)
+        _secondary_lists.append(_secondary_list)
         _x.checkListNames()
     # Serialize KeepListObj objects to JSON
     _list_sets_serialized = json.dumps([vars(_y) for _y in _list_sets_obj])
@@ -279,11 +279,11 @@ def getConfigFromUser() -> tuple[gkeepapi.Keep, dict]:
         "num_sets": num_sets,
         "list_sets": _list_sets_serialized,
     }
-    _json_serialized = json.dumps(_config, indent=4)
+    _config_serialized = json.dumps(_config, indent=4)
 
     # Writing config.json only after all checks have passed
     with open(CONFIG_FILE, "w") as outfile:
-        outfile.write(_json_serialized)
+        outfile.write(_config_serialized)
     _config["master_token"] = _master_token
 
     return (_keep, _config)
@@ -331,7 +331,8 @@ def checkConfig(config: dict) -> bool:
 def programLoop(keep: gkeepapi.Keep, config: dict) -> None:
     """
     Synchronize the changes to the Google Keep server and continuously move
-    low priority items to the primary list using deserialized KeepListObj objects.
+    low priority items to the primary list using deserialized KeepListObj objects,
+    which are extracted from the config (dict).
 
     Args:
         keep (object): The object representing the Google Keep instance.
@@ -345,7 +346,7 @@ def programLoop(keep: gkeepapi.Keep, config: dict) -> None:
         Exception: If an unknown error occurs.
     """
     # Deserialize KeepListObj objects from config
-    keep_list = [
+    _keep_list = [
         KeepListObj(**list_set) for list_set in json.loads(config["list_sets"])
     ]
 
@@ -354,16 +355,16 @@ def programLoop(keep: gkeepapi.Keep, config: dict) -> None:
             # Sync the changes to the Google Keep server
             keep.sync()
 
-            for keep_obj in keep_list:
-                items_to_move = keep_obj.checkIfLowPriorityTicked()
+            for _keep_obj in _keep_list:
+                _items_to_move = _keep_obj.checkIfLowPriorityTicked()
 
                 # if no items to move, return to check for low priority items
-                if items_to_move:
-                    keep_obj.moveItemsToPrimaryList(items_to_move)
+                if _items_to_move:
+                    _keep_obj.moveItemsToPrimaryList(_items_to_move)
                     print(
-                        f"Moved {len(items_to_move)} items to {keep_obj.primary_list}"
+                        f"Moved {len(_items_to_move)} items to {_keep_obj.primary_list}"
                     )
-                    items_to_move.clear()
+                    _items_to_move.clear()
 
                     # Dump Keep Notes to disk for caching
                     with open(KEEP_NOTES_PATH, "w") as outfile:
@@ -390,10 +391,11 @@ def main():
     parser.add_argument("--config", "-c", default="", help="Input config file path")
     args = parser.parse_args()
 
+    # If supplied an external config file use that instead of anything else
     if args.config:
-        _config_file = args.config
-        print(f"Using config file: {_config_file}")
-        config = loadConfig(_config_file)
+        config_file = args.config
+        print(f"Using config file: {config_file}")
+        config = loadConfig(config_file)
     else:
         # If no external config file specified, check if first run
         if firstRun():
