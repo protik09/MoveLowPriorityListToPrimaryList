@@ -5,21 +5,37 @@ Author:
     Protik Banerji <protik09@gmail.com>
 """
 
-import os
 import argparse
-import gkeepapi
-import keyring
-import maskpass
-import re
 import json
-
-# from time import perf_counter as timer
+import logging
+import os
+import re
 from time import sleep
 
-if os.name == "nt":
-    from infi.systray import SysTrayIcon
-else:
-    pass
+import keyring
+import maskpass
+
+import gkeepapi
+
+# from time import perf_counter as timer
+
+# if os.name == "nt":
+#     from infi.systray import SysTrayIcon
+# else:
+#     pass
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+file_handler = logging.FileHandler("GKeepAutomation.log")
+file_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+file_handler.setFormatter(formatter)
+logger = logging.getLogger(__name__)
+logger.addHandler(file_handler)
 
 # Define constants at the top of your file
 KEYRING_NAME: str = "Google Keep Master Token"
@@ -361,9 +377,11 @@ def programLoop(keep: gkeepapi.Keep, config: dict) -> None:
                 # if no items to move, return to check for low priority items
                 if _items_to_move:
                     _keep_obj.moveItemsToPrimaryList(_items_to_move)
-                    print(
+                    logging.info(
                         f"Moved {len(_items_to_move)} items to {_keep_obj.primary_list}"
                     )
+                    logging.debug(f"Items moved: {_items_to_move}")
+
                     _items_to_move.clear()
 
                     # Dump Keep Notes to disk for caching
@@ -376,20 +394,33 @@ def programLoop(keep: gkeepapi.Keep, config: dict) -> None:
             sleep(1)
 
     except KeyboardInterrupt:
-        print("Program interrupted by user.")
+        logging.info("Program interrupted by user.")
+        logger.removeHandler(file_handler)
         return 0
     except Exception as e:
-        print(f"An unknown error occurred: {e}")
+        logging.error(f"An unknown error occurred: {e}")
+        logger.removeHandler(file_handler)
         return -2
 
 
 def main():
+    logging.info("Script starting...")
+
     # Check for input config files
     parser = argparse.ArgumentParser(
         description="Move Low Priority Items to Primary List in Google Keep"
     )
     parser.add_argument("--config", "-c", default="", help="Input config file path")
+    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug logging mode")
+
     args = parser.parse_args()
+
+    # Enable Debug logging if chosen
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.debug("Debug logging enabled")
+    else:
+        logging.getLogger().setLevel(logging.INFO)
 
     # If supplied an external config file use that instead of anything else
     if args.config:
@@ -428,8 +459,10 @@ def main():
             state=json.load(open(KEEP_NOTES_PATH)),
         )
     except FileNotFoundError:  # If the file is not found, load notes from online
+        logger.removeHandler(file_handler)
         keep.authenticate(config["username"], config["master_token"])
     except Exception as e:
+        logger.removeHandler(file_handler)
         raise Exception(f"Error restoring notes: {e}")
 
     # # Start SysTray Icon if running on Windows, do nothing if on Linux
