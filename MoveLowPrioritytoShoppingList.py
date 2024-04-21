@@ -130,9 +130,9 @@ class KeepListObj:
     def __init__(
         self, _keep_notes: object, _primary_list: str, _secondary_list: str
     ) -> None:
-        self.primary_list = _primary_list
-        self.secondary_list = _secondary_list
-        self.keep_notes = _keep_notes
+        self.primary_list: str = _primary_list
+        self.secondary_list: str = _secondary_list
+        self.keep_notes: object = _keep_notes
 
     def checkListNames(self) -> bool:
         """
@@ -155,7 +155,7 @@ class KeepListObj:
             self.primary_list,
         ]:  # Check if title exists using keep.find()
             if not self.keep_notes.find(
-                list_name
+                query=list_name
             ):  # If the list name is not found in the keep object
                 raise LookupError(f"List - {list_name} does not exist.")
         return True
