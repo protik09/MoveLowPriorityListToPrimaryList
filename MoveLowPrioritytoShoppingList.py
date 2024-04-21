@@ -221,7 +221,7 @@ class KeepListObj:
         return items_to_move
 
 
-def checkConfig(config: dict, keep_list_obj_list: list[KeepListObj]) -> bool:
+def checkConfig(config: dict) -> bool:
     """
     Check that the settings file is not broken.
 
@@ -239,7 +239,11 @@ def checkConfig(config: dict, keep_list_obj_list: list[KeepListObj]) -> bool:
     checkToken(config["master_token"])
     checkUsername(config["username"])
     checkNumSets(config["num_sets"])
-    for _list_objs in keep_list_obj_list:
+    # Deserialize KeepListObj objects from config
+    _keep_list = [
+        KeepListObj(**list_set) for list_set in json.loads(config["list_sets"])
+    ]
+    for _list_objs in _keep_list:
         _list_objs.checkListNames()
 
     print(f'Loaded settings. Username: {config["username"]}')
@@ -386,7 +390,7 @@ def main():
             print("First run")
             keep, config = getConfigFromUser()
             # Before loading the Google Keep object check the settings
-            if checkConfig(keep, config):
+            if checkConfig(config):
                 pass
             else:
                 raise Exception("Settings are not valid")
