@@ -12,10 +12,9 @@ import os
 import re
 from time import sleep
 
+import gkeepapi
 import keyring
 import maskpass
-
-import gkeepapi
 
 # from time import perf_counter as timer
 
@@ -142,7 +141,6 @@ def checkNumSets(num_sets: int) -> bool:
 
 
 class KeepListObj:
-
     def __init__(
         self, keep_notes: gkeepapi.Keep, primary_list: str, secondary_list: str
     ) -> None:
@@ -411,7 +409,9 @@ def main():
         description="Move Low Priority Items to Primary List in Google Keep"
     )
     parser.add_argument("--config", "-c", default="", help="Input config file path")
-    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug logging mode")
+    parser.add_argument(
+        "--debug", "-d", action="store_true", help="Enable debug logging mode"
+    )
 
     args = parser.parse_args()
 
