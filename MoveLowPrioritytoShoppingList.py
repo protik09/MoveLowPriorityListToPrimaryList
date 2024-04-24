@@ -9,6 +9,7 @@ import gkeepapi
 import keyring
 import maskpass
 import re
+import sys
 try:
     import simplejson as json
 except ImportError:
@@ -279,7 +280,7 @@ def main():
             keep.resume(username, master_token)
         except Exception as e:
             print(f"Username or master token is invalid: {e}")
-            exit(-1)
+            sys.exit(-1)
         # If the login above is successful, write the master token to system keyring
         keyring.set_password("Google Keep Master Token",
                              username, master_token)
